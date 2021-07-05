@@ -37,7 +37,7 @@ static_assert((std::endian::native == std::endian::big) ||
   BITMANIP_READONLY(data_member_name, data_enum_name, end_bit, start_bit);     \
   template <data_enum_name val>                                                \
   inline void set##data_enum_name() {                                          \
-    printf("%sSetting %35s to %u (%35.*s) from %u (%35.*s)\n",                 \
+    printf("%sSetting %35s to %2u (%35.*s) from %2u (%35.*s)\n",               \
            (get##data_enum_name() == val) ? "   " : "** ", #data_enum_name,    \
            static_cast<uint8_t>(val),                                          \
            static_cast<int>(magic_enum::enum_name<val>().size() - 1),          \

@@ -49,6 +49,9 @@ target_link_libraries(ADC pico_stdlib)
 if(PICO_ON_DEVICE)
     target_link_libraries(ADC
             hardware_spi
+            hardware_pwm
+            hardware_clocks
+            hardware_structs
         )
 endif()
 

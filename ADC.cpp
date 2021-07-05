@@ -4,8 +4,11 @@
 #include <cstring>
 
 #include "bit_utils.h"
+#include "hardware/gpio.h"
 
 #if PICO_ON_DEVICE
+#include "hardware/clocks.h"
+#include "hardware/pwm.h"
 #include "hardware/spi.h"
 #endif
 
@@ -21,6 +24,20 @@
 #define PIN_CS 17
 #define PIN_SCK 18
 #define PIN_MOSI 19
+
+#define PIN_IRQ 6
+
+void configureClock() {
+  set_sys_clock_pll(1596000000, 6, 2);  // 133 MHz
+}
+
+void configureStdio() {
+#if PICO_ON_DEVICE
+  stdio_init_all();
+#endif
+
+  printf("\n===============================\n");
+}
 
 // Initialize the SPI bus
 void configureSpi() {
@@ -92,11 +109,10 @@ void printStatusByte(uint8_t status) {
   printf("\n");
 };
 
-void configureAdc() {
+auto configureAdc() {
   AdcRegisters config;
-  config.setAdcClockSelection<AdcClockSelection::kInternalWithOutput>();
-  // config.setAdcAdcMode<AdcAdcMode::kConversionMode>();
-  config.setAdcOversamplingRatio<AdcOversamplingRatio::kOsr256>();
+  config.setAdcClockSelection<AdcClockSelection::kExternal>();
+  config.setAdcOversamplingRatio<AdcOversamplingRatio::kOsr98304>();
   config.setAdcBoost<AdcBoost::kCurrent1>();
   config.setAdcGain<AdcGain::kGain1>();
   config.setAdcAutoZeroingMux<AdcAutoZeroingMux::kDisable>();
@@ -128,18 +144,133 @@ void configureAdc() {
   spi_write_blocking(SPI_PORT, config.data(), config.size());
   gpio_put(PIN_CS, 1);
 #endif
+
+  return config;
+}
+
+void configurePwm(const uint32_t target_frequency) {
+#if PICO_ON_DEVICE
+  // Rise time (10-90) seems to be ~30 ns. Fall time is ~25 ns.
+  // We want to make sure there's enough time to perform a rise and fall. The
+  // intended precision (e.g. 1%) will set the PWM frequency. For example:
+  //
+  //  T_min = rise time + fall time = 55ns
+  //  precision = 1/100
+  //  clock = 133MHz
+  //  clock_period = 1/clock = 1/133MHz = 7.5e-9 = 7.5ns
+  //  clock_counts = (precision^-1 * T_min) / clock_period
+  //               = (100 * 55ns) / 7.5ns
+  //               = 5.5us / 7.5ns
+  //               = 733
+  //  min_steps = precision * clock_counts
+  //
+  // So, you'd take the clock_counts value and use that as the input to
+  // set_wrap, which will set the PWM frequency (in this case to 181446KHz).
+  // Then, whenever a duty cycle percentage is specified, you use the min_steps
+  // variable to round to the nearest step. Or, at the very least, you use
+  // min_steps to make sure you don't go lower than that for set_chan_level, as
+  // you would otherwise not reach the full 3.3V output value of PWM.
+  //
+  // Also note that the number of counts needs to be <= 65536, as the counter
+  // and TOP are 16 bits in size. This is a frequency of 2KHz or so, with a 133
+  // MHz clock. This can be lowered by using the clock divider.
+
+  const uint32_t f_clk_sys = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_SYS);
+  printf("clk_sys = %dkHz\n", f_clk_sys);
+
+  const uint8_t kGpioNum = 22;
+  gpio_set_function(kGpioNum, GPIO_FUNC_PWM);  // GPIO22 is on physical pin 29
+
+  const auto slice_num = pwm_gpio_to_slice_num(kGpioNum);
+  const auto channel_num = pwm_gpio_to_channel(kGpioNum);
+
+  const uint32_t counts_per_period = (f_clk_sys * 1000) / target_frequency;
+  printf("Using %u counts for a requested freq of %u\n", counts_per_period,
+         target_frequency);
+
+  pwm_set_wrap(slice_num, counts_per_period - 1);
+  pwm_set_chan_level(slice_num, channel_num, counts_per_period / 2);
+  pwm_set_enabled(slice_num, true);
+
+#endif
+}
+
+void startAdc(AdcRegisters& config) {
+  config.setAdcAdcMode<AdcAdcMode::kConversionMode>();
+
+  // TODO: Come up with a better way to figure out the AdcRegisterAddress to
+  // start writing to.
+  const uint8_t inc_write_cmd_byte =
+      makeCommandByte(kAdcAddr, AdcRegisterAddresses::kConfig0,
+                      AdcCommandType::kIncrementalWrite);
+  uint8_t status;  // Status from the command transfer
+
+#if PICO_ON_DEVICE
+  gpio_put(PIN_CS, 0);
+  spi_write_read_blocking(SPI_PORT, &inc_write_cmd_byte, &status, 1);
+
+  printStatusByte(status);
+
+  spi_write_blocking(SPI_PORT, config.data(), 1);  // Only write config0 byte
+  gpio_put(PIN_CS, 1);
+#endif
+}
+
+void readAdc() {
+  gpio_set_function(PIN_IRQ, GPIO_FUNC_SIO);
+  gpio_disable_pulls(PIN_IRQ);  // Already has a pullup from the ADC
+  gpio_set_input_hysteresis_enabled(PIN_IRQ, true);
+  gpio_set_dir(PIN_IRQ, GPIO_IN);
+
+  const uint8_t static_read_cmd_byte = makeCommandByte(
+      kAdcAddr, AdcRegisterAddresses::kAdcData, AdcCommandType::kStaticRead);
+  uint8_t status;
+  uint32_t adc_data = 0;
+
+  int reads = 0;
+  while (true) {
+    if (gpio_get(PIN_IRQ)) {  // Active low signal
+      continue;
+    }
+
+    reads += 1;
+
+#if PICO_ON_DEVICE
+    // Have _some_ data available. Let's figure out what it is.
+    gpio_put(PIN_CS, 0);
+    spi_write_read_blocking(SPI_PORT, &static_read_cmd_byte, &status, 1);
+    spi_read_blocking(SPI_PORT, 0, reinterpret_cast<uint8_t*>(&adc_data), 4);
+    gpio_put(PIN_CS, 1);
+#endif
+
+    // Use the status byte that was now populated to figure out what's up.
+    // printStatusByte(status);
+    adc_data = swap_msb_and_host<4>(adc_data);
+    printf("Received %10d: ", adc_data & 0xFFFFFF);
+    printBits(sizeof(status), &status);
+    printBits(sizeof(adc_data), &adc_data);
+    printf("\r");
+  }
 }
 
 int main() {
-#if PICO_ON_DEVICE
-  stdio_init_all();
-#endif
+  configureClock();
 
-  printf("\n===============================\n");
+  configureStdio();
 
   configureSpi();
   // validateDefaultRegisterMap();
 
-  configureAdc();
+  auto adc_config = configureAdc();
+
+  // Make sure to start the external clock only after we've told the ADC to
+  // expect the external clock.
+  configurePwm(5e6);
+
+  // Start reading data!
+  startAdc(adc_config);
+
+  readAdc();
+
   return 0;
 }
