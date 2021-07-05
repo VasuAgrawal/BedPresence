@@ -5,6 +5,7 @@ cmake_minimum_required(VERSION 3.13)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 20)
 
+
 # initalize pico_sdk from installed location
 # (note this can come from environment, CMake cache etc)
 set(PICO_SDK_PATH "/home/vasu/Documents/projects/pico/getting_started/pico-sdk")
@@ -25,9 +26,11 @@ else()
     message(STATUS "Configuring for HOST")
 endif()
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(ADC ADC.cpp mcp356x.h magic_enum.hpp)
+add_executable(ADC ADC.cpp mcp356x.h bit_utils.h magic_enum.hpp)
 
 pico_set_program_name(ADC "ADC")
 pico_set_program_version(ADC "0.1")
@@ -51,3 +54,12 @@ endif()
 
 pico_add_extra_outputs(ADC)
 
+if (NOT PICO_ON_DEVICE)
+    enable_testing()
+    include(GoogleTest)
+
+    add_executable(mcp356x_test magic_enum.hpp mcp356x.h bit_utils.h mcp356x_test.cpp)
+    target_link_libraries(mcp356x_test gtest gtest_main pthread)
+
+    gtest_discover_tests(mcp356x_test)
+endif()

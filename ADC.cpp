@@ -2,15 +2,15 @@
 
 #include <cstdint>
 #include <cstring>
-#include <bit>
+
+#include "bit_utils.h"
 
 #if PICO_ON_DEVICE
 #include "hardware/spi.h"
 #endif
 
-#include "pico/stdlib.h"
-
 #include "mcp356x.h"
+#include "pico/stdlib.h"
 
 // SPI Defines
 // We are going to use SPI 0, and allocate it to the following GPIO pins
@@ -22,25 +22,10 @@
 #define PIN_SCK 18
 #define PIN_MOSI 19
 
-// Assumes little endian
-void printBits(size_t const size, void const *const ptr) {
-  unsigned char *b = (unsigned char *)ptr;
-  unsigned char byte;
-  int i, j;
-
-  for (i = size - 1; i >= 0; i--) {
-    for (j = 7; j >= 0; j--) {
-      byte = (b[i] >> j) & 1;
-      printf("%u", byte);
-    }
-  }
-  // puts("");
-}
-
+// Initialize the SPI bus
 void configureSpi() {
 #if PICO_ON_DEVICE
-  // SPI initialisation. This example will use SPI at 1MHz.
-  spi_init(SPI_PORT, 1000);
+  spi_init(SPI_PORT, 1e7);  // 10 MHz SPI
   gpio_set_function(PIN_MISO, GPIO_FUNC_SPI);
   gpio_set_function(PIN_CS, GPIO_FUNC_SIO);
   gpio_set_function(PIN_SCK, GPIO_FUNC_SPI);
@@ -55,29 +40,34 @@ void configureSpi() {
 #endif
 }
 
+// Load the default register map from the device into an empty register object,
+// just to sanity check that we have all the correct defaults. Can be skipped
+// for release builds.
 bool validateDefaultRegisterMap() {
   // First, read all the default config values off the device.
-  uint8_t inc_read_cmd_byte =
+  const uint8_t inc_read_cmd_byte =
       makeCommandByte(kAdcAddr, AdcRegisterAddresses::kConfig0,
                       AdcCommandType::kIncrementalRead);
-  AdcRegisters current_registers(false);
+  AdcRegisters current_registers;
+  // Don't actually need to wipe.
+  // current_registers.wipe();
   uint8_t status;  // Status from the command transfer
 
 #if PICO_ON_DEVICE
   gpio_put(PIN_CS, 0);
   spi_write_read_blocking(SPI_PORT, &inc_read_cmd_byte, &status, 1);
   spi_read_blocking(SPI_PORT, 0, current_registers.data(),
-                    current_registers.REGISTER_MAP_SIZE);
+                    current_registers.size());
   gpio_put(PIN_CS, 1);
 #endif
 
   bool ret = true;
-  AdcRegisters default_registers;
-  for (size_t i = 0; i < AdcRegisters::REGISTER_MAP_SIZE; ++i) {
+  const AdcRegisters default_registers;
+  for (size_t i = 0; i < current_registers.size(); ++i) {
     printf("Byte %02lu: loaded ", i);
     printBits(1, &current_registers.data()[i]);
     printf(", default ");
-    printBits(1, &default_registers.data()[i]);
+    printBits(1, &default_registers.begin()[i]);
 
     if (current_registers.data()[i] != default_registers.data()[i]) {
       printf(" <--------- mismatch!");
@@ -87,37 +77,69 @@ bool validateDefaultRegisterMap() {
     printf("\n");
   }
 
+  printf("\n");
+
   return ret;
 }
 
+void printStatusByte(uint8_t status) {
+  printf("Received status: ");
+  printBits(sizeof(status), &status);
+  printf(", addr: %d", (status & 0b00110000) >> 4);
+  printf(", data ready status: %s", ((status & 0b100) >> 2) ? "none" : "READY");
+  printf(", crccfg status: %s", ((status & 0b10) >> 1) ? "good" : "ERROR");
+  printf(", por status: %s", ((status & 0b1)) ? "fine" : "REBOOTED");
+  printf("\n");
+};
+
 void configureAdc() {
   AdcRegisters config;
-  config.setClockSelection<AdcClockSelection::kInternalWithOutput>();
-  config.setAdcMode<AdcAdcMode::kConversionMode>();
-  config.setOversamplingRatio<AdcOversamplingRatio::kOsr256>();
-  config.setBoost<AdcBoost::kCurrent1>();
-  config.setGain<AdcGain::kGain1>();
-  config.setAutoZeroingMux<AdcAutoZeroingMux::kDisable>();
+  config.setAdcClockSelection<AdcClockSelection::kInternalWithOutput>();
+  // config.setAdcAdcMode<AdcAdcMode::kConversionMode>();
+  config.setAdcOversamplingRatio<AdcOversamplingRatio::kOsr256>();
+  config.setAdcBoost<AdcBoost::kCurrent1>();
+  config.setAdcGain<AdcGain::kGain1>();
+  config.setAdcAutoZeroingMux<AdcAutoZeroingMux::kDisable>();
+  config.setAdcConversionMode<AdcConversionMode::kContinuousConversion>();
+  config.setAdcDataFormat<AdcDataFormat::k32BitWitChannelIdAndOverrange>();
+  config.setAdcEnableDigitalOffsetCalibration<
+      AdcEnableDigitalOffsetCalibration::kDisable>();
+  config.setAdcEnableDigitalGainCalibration<
+      AdcEnableDigitalGainCalibration::kDisable>();
+  config.setAdcIrqModeOutputSelection<AdcIrqModeOutputSelection::kIrqOutput>();
+  config.setAdcIrqModeInactiveSelection<
+      AdcIrqModeInactiveSelection::kLogicHigh>();
+  config.setAdcEnableConversionStartInterrupt<
+      AdcEnableConversionStartInterrupt::kDisable>();
+  config.setAdcMuxVinPlusSelection<AdcMuxVinPlusSelection::kCh0>();
+  config.setAdcMuxVinMinusSelection<AdcMuxVinMinusSelection::kCh1>();
+
+  const uint8_t inc_write_cmd_byte =
+      makeCommandByte(kAdcAddr, AdcRegisterAddresses::kConfig0,
+                      AdcCommandType::kIncrementalWrite);
+  uint8_t status;  // Status from the command transfer
+
+#if PICO_ON_DEVICE
+  gpio_put(PIN_CS, 0);
+  spi_write_read_blocking(SPI_PORT, &inc_write_cmd_byte, &status, 1);
+
+  printStatusByte(status);
+
+  spi_write_blocking(SPI_PORT, config.data(), config.size());
+  gpio_put(PIN_CS, 1);
+#endif
 }
 
 int main() {
 #if PICO_ON_DEVICE
   stdio_init_all();
 #endif
+
   printf("\n===============================\n");
 
-  if constexpr (std::endian::native == std::endian::big) {
-    printf("Uh what the fuck\n");
-  } else if constexpr (std::endian::native == std::endian::little) {
-    printf("little endian, which is expected\n");
-  } else {
-    printf("Mixed endian1?@#?!@?#!@]\n");
-  }
-
-  // configureSpi();
+  configureSpi();
   // validateDefaultRegisterMap();
 
   configureAdc();
-
   return 0;
 }
