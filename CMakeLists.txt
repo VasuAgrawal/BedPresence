@@ -53,6 +53,8 @@ if(PICO_ON_DEVICE)
             hardware_clocks
             hardware_structs
         )
+    pico_set_float_implementation(ADC pico)
+    pico_set_double_implementation(ADC pico)
 endif()
 
 pico_add_extra_outputs(ADC)

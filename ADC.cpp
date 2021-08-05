@@ -27,6 +27,7 @@
 
 #define PIN_IRQ 6
 
+// Configures the clock on the RP2040
 void configureClock() {
   set_sys_clock_pll(1596000000, 6, 2);  // 133 MHz
 }
@@ -42,7 +43,7 @@ void configureStdio() {
 // Initialize the SPI bus
 void configureSpi() {
 #if PICO_ON_DEVICE
-  spi_init(SPI_PORT, 1e7);  // 10 MHz SPI
+  spi_init(SPI_PORT, 2e7);  // 20 MHz SPI
   gpio_set_function(PIN_MISO, GPIO_FUNC_SPI);
   gpio_set_function(PIN_CS, GPIO_FUNC_SIO);
   gpio_set_function(PIN_SCK, GPIO_FUNC_SPI);
@@ -106,7 +107,6 @@ void printStatusByte(uint8_t status) {
   printf(", data ready status: %s", ((status & 0b100) >> 2) ? "none" : "READY");
   printf(", crccfg status: %s", ((status & 0b10) >> 1) ? "good" : "ERROR");
   printf(", por status: %s", ((status & 0b1)) ? "fine" : "REBOOTED");
-  printf("\n");
 };
 
 auto configureAdc() {
@@ -140,6 +140,7 @@ auto configureAdc() {
   spi_write_read_blocking(SPI_PORT, &inc_write_cmd_byte, &status, 1);
 
   printStatusByte(status);
+  printf("\n");
 
   spi_write_blocking(SPI_PORT, config.data(), config.size());
   gpio_put(PIN_CS, 1);
@@ -210,6 +211,7 @@ void startAdc(AdcRegisters& config) {
   spi_write_read_blocking(SPI_PORT, &inc_write_cmd_byte, &status, 1);
 
   printStatusByte(status);
+  printf("\n");
 
   spi_write_blocking(SPI_PORT, config.data(), 1);  // Only write config0 byte
   gpio_put(PIN_CS, 1);
@@ -225,7 +227,7 @@ void readAdc() {
   const uint8_t static_read_cmd_byte = makeCommandByte(
       kAdcAddr, AdcRegisterAddresses::kAdcData, AdcCommandType::kStaticRead);
   uint8_t status;
-  uint32_t adc_data = 0;
+  uint32_t adc_data;
 
   int reads = 0;
   while (true) {
@@ -244,11 +246,28 @@ void readAdc() {
 #endif
 
     // Use the status byte that was now populated to figure out what's up.
-    // printStatusByte(status);
+    printStatusByte(status);
+    printf(" | ADCDATA");
+
     adc_data = swap_msb_and_host<4>(adc_data);
-    printf("Received %10d: ", adc_data & 0xFFFFFF);
-    printBits(sizeof(status), &status);
+    uint32_t adc_data_ch_id = (adc_data >> 28) & 0xF;
+    printf(" ch_id: 0x%X", adc_data_ch_id);
+  
+    printf(" bits: ");
     printBits(sizeof(adc_data), &adc_data);
+
+    printf(" converted: ");
+    adc_data &= 0x0F'FF'FF'FF; // Remove the channel ID now
+    if (adc_data == 0x00'FF'FF'FF) { // Overrange
+      printf("OVERRANGE");
+    } else if (adc_data == 0x0F'00'00'00) { // Underrange
+      printf("UNDERRANGE");
+    } else {
+      adc_data &= 0xFF'FF'FF; // Remove the sign bit now, assumed to be 0.
+      float value = 3.3f * adc_data / ((1 << 23) - 1);
+      printf("%0.5fV", value);
+    }
+    
     printf("\r");
   }
 }
