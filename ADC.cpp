@@ -114,7 +114,7 @@ auto configureAdc() {
   config.setAdcClockSelection<AdcClockSelection::kExternal>();
   config.setAdcOversamplingRatio<AdcOversamplingRatio::kOsr98304>();
   config.setAdcBoost<AdcBoost::kCurrent1>();
-  config.setAdcGain<AdcGain::kGain1>();
+  config.setAdcGain<AdcGain::kGain4>();
   config.setAdcAutoZeroingMux<AdcAutoZeroingMux::kDisable>();
   config.setAdcConversionMode<AdcConversionMode::kContinuousConversion>();
   config.setAdcDataFormat<AdcDataFormat::k32BitWitChannelIdAndOverrange>();
@@ -218,6 +218,13 @@ void startAdc(AdcRegisters& config) {
 #endif
 }
 
+template<const uint8_t bits, typename T>
+int32_t sign_extend(T x) {
+  T m = 1;
+  m << bits - 1;
+  return (x ^ m) - m;
+}
+
 void readAdc() {
   gpio_set_function(PIN_IRQ, GPIO_FUNC_SIO);
   gpio_disable_pulls(PIN_IRQ);  // Already has a pullup from the ADC
@@ -253,9 +260,18 @@ void readAdc() {
     uint32_t adc_data_ch_id = (adc_data >> 28) & 0xF;
     printf(" ch_id: 0x%X", adc_data_ch_id);
   
-    printf(" bits: ");
+    printf(" raw bits: ");
     printBits(sizeof(adc_data), &adc_data);
+    // printf(" raw bits hex: 0x%X", adc_data);
 
+    int32_t raw_value = adc_data & 0xFFFFFF;
+    raw_value = (raw_value << 8) >> 8;
+    // // int32_t raw_value = static_cast<int32_t>(sign_extend<24>(adc_data & 0xFFFFFF)); // sign extension, hopefully
+    // // int32_t raw_value = sign_extend<24>(adc_data & 0xFFFFFF); // sign extension, hopefully
+    // printf(" twos bits: ");
+    // printBits(sizeof(raw_value), &raw_value);
+    // // printf(" twos bits hex: 0x%X", raw_value);
+    // 
     printf(" converted: ");
     adc_data &= 0x0F'FF'FF'FF; // Remove the channel ID now
     if (adc_data == 0x00'FF'FF'FF) { // Overrange
@@ -263,8 +279,15 @@ void readAdc() {
     } else if (adc_data == 0x0F'00'00'00) { // Underrange
       printf("UNDERRANGE");
     } else {
-      adc_data &= 0xFF'FF'FF; // Remove the sign bit now, assumed to be 0.
-      float value = 3.3f * adc_data / ((1 << 23) - 1);
+    
+      // convert the lower 28 bits, which are a twos-complement signed integer
+      // representing the number of counts. The actual data is only 24 bits,
+      // plus a sign extension bit afterwards.
+      
+      // uint32_t raw_value = adc_data & 0xFFFFFF;
+      float value = (3.3f / (1 << 23)) * raw_value;
+      // adc_data &= 0xFF'FF'FF; // Remove the sign bit now, assumed to be 0.
+      // float value = 3.3f * adc_data / ((1 << 23) - 1);
       printf("%0.5fV", value);
     }
     
