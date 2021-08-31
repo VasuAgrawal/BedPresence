@@ -1,0 +1,4 @@
+(fp_lib_table
+  (lib (name 54-00177)(type KiCad)(uri ${KIPRJMOD}/../libraries/54-00177.pretty)(options "")(descr ""))
+  (lib (name 1702473)(type KiCad)(uri ${KIPRJMOD}/../libraries/ul_1702473/KiCAD/2021-08-28_15-16-21/footprints.pretty)(options "")(descr ""))
+)
