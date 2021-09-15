@@ -1,0 +1,9 @@
+(sym_lib_table
+  (lib (name Pico)(type Legacy)(uri "${KIPRJMOD}/../libraries/KiCad-RP-Pico/RP-Pico Libraries/MCU_RaspberryPi_and_Boards.lib")(options "")(descr ""))
+  (lib (name TSM-107-01-T-SV)(type Legacy)(uri ${KIPRJMOD}/../libraries/TSM-107-01-T-SV/TSM-107-01-T-SV.lib)(options "")(descr ""))
+  (lib (name MAX6070BAUT33T)(type Legacy)(uri ${KIPRJMOD}/../libraries/MAX6070BAUT33T/MAX6070BAUT33T.lib)(options "")(descr ""))
+  (lib (name TPS62046DGQR)(type Legacy)(uri ${KIPRJMOD}/../libraries/TPS62046DGQR/TPS62046DGQR.lib)(options "")(descr ""))
+  (lib (name 2021-08-17_01-02-19)(type Legacy)(uri ${KIPRJMOD}/../libraries/ul_MCP3564-E-ST/KiCAD/2021-08-17_01-02-19/2021-08-17_01-02-19.lib)(options "")(descr ""))
+  (lib (name 54-00177)(type Legacy)(uri ${KIPRJMOD}/../libraries/54-00177/54-00177.lib)(options "")(descr ""))
+  (lib (name MAX4209HAUA)(type Legacy)(uri ${KIPRJMOD}/../libraries/MAX4209HAUA/MAX4209HAUA.lib)(options "")(descr ""))
+)

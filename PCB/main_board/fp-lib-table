@@ -1,0 +1,11 @@
+(fp_lib_table
+  (lib (name TSM-107-01-T-SV)(type KiCad)(uri ${KIPRJMOD}/../libraries/TSM-107-01-T-SV)(options "")(descr ""))
+  (lib (name MCU_RaspberryPi_and_Boards)(type KiCad)(uri "${KIPRJMOD}/../libraries/KiCad-RP-Pico/RP-Pico Libraries/MCU_RaspberryPi_and_Boards.pretty")(options "")(descr ""))
+  (lib (name MAX6070BAUT33T)(type KiCad)(uri ${KIPRJMOD}/../libraries/MAX6070BAUT33T)(options "")(descr ""))
+  (lib (name TPS62046DGQR)(type KiCad)(uri ${KIPRJMOD}/../libraries/TPS62046DGQR)(options "")(descr ""))
+  (lib (name 744062006)(type KiCad)(uri ${KIPRJMOD}/../libraries/Custom_stuff/744062006.pretty)(options "")(descr ""))
+  (lib (name ‎MCP3564-E-ST)(type KiCad)(uri ${KIPRJMOD}/../libraries/ul_MCP3564-E-ST/KiCAD/2021-08-17_01-02-19/footprints.pretty)(options "")(descr ""))
+  (lib (name 54-00177)(type KiCad)(uri ${KIPRJMOD}/../libraries/54-00177.pretty)(options "")(descr ""))
+  (lib (name MAX4209HAUA)(type KiCad)(uri ${KIPRJMOD}/../libraries/MAX4209HAUA)(options "")(descr ""))
+  (lib (name wifi_connector)(type KiCad)(uri ${KIPRJMOD}/../libraries/Custom_stuff/wifi_connector.pretty)(options "")(descr ""))
+)
