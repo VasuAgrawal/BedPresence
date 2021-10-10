@@ -14,7 +14,7 @@ Comment3 ""
 Comment4 ""
 $EndDescr
 $Comp
-L 54-00177:54-00177 J1
+L bridge_board-rescue:54-00177-54-00177 J1
 U 1 1 612B7BBF
 P 3800 3650
 F 0 "J1" H 3833 4175 50  0000 C CNN
