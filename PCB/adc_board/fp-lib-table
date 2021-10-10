@@ -13,4 +13,5 @@
   (lib (name 2x5header)(type KiCad)(uri ${KIPRJMOD}/../libraries/Custom_stuff/2x5header.pretty)(options "")(descr ""))
   (lib (name ul_MCP1755T-3302E-OT)(type KiCad)(uri ${KIPRJMOD}/../libraries/ul_MCP1755T-3302E-OT/KiCAD/2021-09-20_04-19-31/footprints.pretty)(options "")(descr ""))
   (lib (name digikey-footprints)(type KiCad)(uri ${KIPRJMOD}/../libraries/digikey-kicad-library/digikey-footprints.pretty)(options "")(descr ""))
+  (lib (name mounting)(type KiCad)(uri /home/vasu/Documents/projects/bed_presence/PCB/libraries/Custom_stuff/mounting.pretty)(options "")(descr ""))
 )
