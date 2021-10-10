@@ -1,3 +1,6 @@
 [submodule "PCB/libraries/KiCad-RP-Pico"]
 	path = PCB/libraries/KiCad-RP-Pico
 	url = https://github.com/ncarandini/KiCad-RP-Pico.git
+[submodule "PCB/libraries/digikey-kicad-library"]
+	path = PCB/libraries/digikey-kicad-library
+	url = https://github.com/Digi-Key/digikey-kicad-library.git
