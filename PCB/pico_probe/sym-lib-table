@@ -1,0 +1,4 @@
+(sym_lib_table
+  (lib (name MCU_RaspberryPi_and_Boards)(type Legacy)(uri "${KIPRJMOD}/../libraries/KiCad-RP-Pico/RP-Pico Libraries/MCU_RaspberryPi_and_Boards.lib")(options "")(descr ""))
+  (lib (name TSM-107-01-T-SV)(type Legacy)(uri ${KIPRJMOD}/../libraries/TSM-107-01-T-SV/TSM-107-01-T-SV.lib)(options "")(descr ""))
+)

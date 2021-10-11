@@ -1,7 +1,5 @@
-EESchema-LIBRARY Version 2.3
+EESchema-LIBRARY Version 2.4
 #encoding utf-8
-#(c) SnapEDA 2016 (snapeda.com)
-#This work is licensed under a Creative Commons Attribution-ShareAlike 4.0 International License (CC BY-SA) with Design Exception 1.0
 #
 # TSM-107-01-T-SV
 #
@@ -13,14 +11,14 @@ F3 "" 0 0 50 H I L BNN
 F4 "SAMTEC" 0 0 50 H I L BNN "MANUFACTURER"
 DRAW
 S -200 -450 200 450 0 0 10 f
-X 01 01 -400 300 200 R 40 40 0 0 P 
-X 02 02 -400 200 200 R 40 40 0 0 P 
-X 03 03 -400 100 200 R 40 40 0 0 P 
-X 04 04 -400 0 200 R 40 40 0 0 P 
-X 05 05 -400 -100 200 R 40 40 0 0 P 
-X 06 06 -400 -200 200 R 40 40 0 0 P 
-X 07 07 -400 -300 200 R 40 40 0 0 P 
+X TX 1 -400 300 200 R 40 40 0 0 P
+X RX 2 -400 200 200 R 40 40 0 0 P
+X SWCLK 3 -400 100 200 R 40 40 0 0 P
+X GND 4 -400 0 200 R 40 40 0 0 P
+X SWDIO 5 -400 -100 200 R 40 40 0 0 P
+X GND 6 -400 -200 200 R 40 40 0 0 P
+X VSYS 7 -400 -300 200 R 40 40 0 0 P
 ENDDRAW
 ENDDEF
 #
-# End Library
+#End Library
