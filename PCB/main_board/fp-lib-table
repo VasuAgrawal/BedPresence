@@ -8,4 +8,5 @@
   (lib (name 54-00177)(type KiCad)(uri ${KIPRJMOD}/../libraries/54-00177.pretty)(options "")(descr ""))
   (lib (name MAX4209HAUA)(type KiCad)(uri ${KIPRJMOD}/../libraries/MAX4209HAUA)(options "")(descr ""))
   (lib (name wifi_connector)(type KiCad)(uri ${KIPRJMOD}/../libraries/Custom_stuff/wifi_connector.pretty)(options "")(descr ""))
+  (lib (name 2x5header)(type KiCad)(uri ${KIPRJMOD}/../libraries/Custom_stuff/2x5header.pretty)(options "")(descr ""))
 )
