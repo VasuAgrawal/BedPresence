@@ -21,9 +21,25 @@
 // information on GPIO assignments
 #define SPI_PORT spi0
 #define PIN_MISO 16
-#define PIN_CS 17
 #define PIN_SCK 18
 #define PIN_MOSI 19
+#define PIN_CLK 22
+
+#define PIN_ADC0_ENABLE 4
+#define PIN_ADC0_PGOOD 3
+#define PIN_ADC0_CS 2
+
+#define PIN_ADC1_ENABLE 8
+#define PIN_ADC1_PGOOD 7
+#define PIN_ADC1_CS 6
+
+#define PIN_ADC2_ENABLE 21
+#define PIN_ADC2_PGOOD 20
+#define PIN_ADC2_CS 17
+
+#define PIN_ADC3_ENABLE 28
+#define PIN_ADC3_PGOOD 27
+#define PIN_ADC3_CS 26
 
 #define PIN_IRQ 6
 
@@ -41,17 +57,17 @@ void configureStdio() {
 }
 
 // Initialize the SPI bus
-void configureSpi() {
+void configureSpi(uint32_t chip_select_pin) {
 #if PICO_ON_DEVICE
   spi_init(SPI_PORT, 2e7);  // 20 MHz SPI
   gpio_set_function(PIN_MISO, GPIO_FUNC_SPI);
-  gpio_set_function(PIN_CS, GPIO_FUNC_SIO);
+  gpio_set_function(chip_select_pin, GPIO_FUNC_SIO);
   gpio_set_function(PIN_SCK, GPIO_FUNC_SPI);
   gpio_set_function(PIN_MOSI, GPIO_FUNC_SPI);
 
   // Chip select is active-low, so we'll initialise it to a driven-high state
-  gpio_set_dir(PIN_CS, GPIO_OUT);
-  gpio_put(PIN_CS, 1);
+  gpio_set_dir(chip_select_pin, GPIO_OUT);
+  gpio_put(chip_select_pin, 1);
 
   // Be explicit about the SPI format
   spi_set_format(SPI_PORT, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
@@ -61,7 +77,7 @@ void configureSpi() {
 // Load the default register map from the device into an empty register object,
 // just to sanity check that we have all the correct defaults. Can be skipped
 // for release builds.
-bool validateDefaultRegisterMap() {
+bool validateDefaultRegisterMap(uint32_t chip_select_pin) {
   // First, read all the default config values off the device.
   const uint8_t inc_read_cmd_byte =
       makeCommandByte(kAdcAddr, AdcRegisterAddresses::kConfig0,
@@ -72,11 +88,11 @@ bool validateDefaultRegisterMap() {
   uint8_t status;  // Status from the command transfer
 
 #if PICO_ON_DEVICE
-  gpio_put(PIN_CS, 0);
+  gpio_put(chip_select_pin, 0);
   spi_write_read_blocking(SPI_PORT, &inc_read_cmd_byte, &status, 1);
   spi_read_blocking(SPI_PORT, 0, current_registers.data(),
                     current_registers.size());
-  gpio_put(PIN_CS, 1);
+  gpio_put(chip_select_pin, 1);
 #endif
 
   bool ret = true;
@@ -104,17 +120,17 @@ void printStatusByte(uint8_t status) {
   printf("Received status: ");
   printBits(sizeof(status), &status);
   printf(", addr: %d", (status & 0b00110000) >> 4);
-  printf(", data ready status: %s", ((status & 0b100) >> 2) ? "none" : "READY");
+  printf(", data ready status: %s", ((status & 0b100) >> 2) ? "nope" : "READY");
   printf(", crccfg status: %s", ((status & 0b10) >> 1) ? "good" : "ERROR");
   printf(", por status: %s", ((status & 0b1)) ? "fine" : "REBOOTED");
 };
 
-auto configureAdc() {
+auto configureAdc(uint32_t chip_select_pin) {
   AdcRegisters config;
   config.setAdcClockSelection<AdcClockSelection::kExternal>();
   config.setAdcOversamplingRatio<AdcOversamplingRatio::kOsr98304>();
   config.setAdcBoost<AdcBoost::kCurrent1>();
-  config.setAdcGain<AdcGain::kGain4>();
+  config.setAdcGain<AdcGain::kGain1>();
   config.setAdcAutoZeroingMux<AdcAutoZeroingMux::kDisable>();
   config.setAdcConversionMode<AdcConversionMode::kContinuousConversion>();
   config.setAdcDataFormat<AdcDataFormat::k32BitWitChannelIdAndOverrange>();
@@ -136,14 +152,14 @@ auto configureAdc() {
   uint8_t status;  // Status from the command transfer
 
 #if PICO_ON_DEVICE
-  gpio_put(PIN_CS, 0);
+  gpio_put(chip_select_pin, 0);
   spi_write_read_blocking(SPI_PORT, &inc_write_cmd_byte, &status, 1);
 
   printStatusByte(status);
   printf("\n");
 
   spi_write_blocking(SPI_PORT, config.data(), config.size());
-  gpio_put(PIN_CS, 1);
+  gpio_put(chip_select_pin, 1);
 #endif
 
   return config;
@@ -179,11 +195,10 @@ void configurePwm(const uint32_t target_frequency) {
   const uint32_t f_clk_sys = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_SYS);
   printf("clk_sys = %dkHz\n", f_clk_sys);
 
-  const uint8_t kGpioNum = 22;
-  gpio_set_function(kGpioNum, GPIO_FUNC_PWM);  // GPIO22 is on physical pin 29
+  gpio_set_function(PIN_CLK, GPIO_FUNC_PWM);  // GPIO22 is on physical pin 29
 
-  const auto slice_num = pwm_gpio_to_slice_num(kGpioNum);
-  const auto channel_num = pwm_gpio_to_channel(kGpioNum);
+  const auto slice_num = pwm_gpio_to_slice_num(PIN_CLK);
+  const auto channel_num = pwm_gpio_to_channel(PIN_CLK);
 
   const uint32_t counts_per_period = (f_clk_sys * 1000) / target_frequency;
   printf("Using %u counts for a requested freq of %u\n", counts_per_period,
@@ -196,7 +211,7 @@ void configurePwm(const uint32_t target_frequency) {
 #endif
 }
 
-void startAdc(AdcRegisters& config) {
+void startAdc(uint32_t chip_select_pin, AdcRegisters& config) {
   config.setAdcAdcMode<AdcAdcMode::kConversionMode>();
 
   // TODO: Come up with a better way to figure out the AdcRegisterAddress to
@@ -207,50 +222,72 @@ void startAdc(AdcRegisters& config) {
   uint8_t status;  // Status from the command transfer
 
 #if PICO_ON_DEVICE
-  gpio_put(PIN_CS, 0);
+  gpio_put(chip_select_pin, 0);
   spi_write_read_blocking(SPI_PORT, &inc_write_cmd_byte, &status, 1);
 
   printStatusByte(status);
   printf("\n");
 
   spi_write_blocking(SPI_PORT, config.data(), 1);  // Only write config0 byte
-  gpio_put(PIN_CS, 1);
+  gpio_put(chip_select_pin, 1);
 #endif
 }
 
-template<const uint8_t bits, typename T>
+template <const uint8_t bits, typename T>
 int32_t sign_extend(T x) {
   T m = 1;
   m << bits - 1;
   return (x ^ m) - m;
 }
 
-void readAdc() {
-  gpio_set_function(PIN_IRQ, GPIO_FUNC_SIO);
-  gpio_disable_pulls(PIN_IRQ);  // Already has a pullup from the ADC
-  gpio_set_input_hysteresis_enabled(PIN_IRQ, true);
-  gpio_set_dir(PIN_IRQ, GPIO_IN);
+void readAdc(uint32_t chip_select_pin) {
+  // gpio_set_function(PIN_IRQ, GPIO_FUNC_SIO);
+  // gpio_disable_pulls(PIN_IRQ);  // Already has a pullup from the ADC
+  // gpio_set_input_hysteresis_enabled(PIN_IRQ, true);
+  // gpio_set_dir(PIN_IRQ, GPIO_IN);
 
   const uint8_t static_read_cmd_byte = makeCommandByte(
       kAdcAddr, AdcRegisterAddresses::kAdcData, AdcCommandType::kStaticRead);
-  uint8_t status;
+  uint8_t status = 0;
   uint32_t adc_data;
 
   int reads = 0;
   while (true) {
-    if (gpio_get(PIN_IRQ)) {  // Active low signal
-      continue;
-    }
-
-    reads += 1;
+    // if (gpio_get(PIN_IRQ)) {  // Active low signal
+    //   continue;
+    // }
 
 #if PICO_ON_DEVICE
-    // Have _some_ data available. Let's figure out what it is.
-    gpio_put(PIN_CS, 0);
-    spi_write_read_blocking(SPI_PORT, &static_read_cmd_byte, &status, 1);
+
+    // Loop until we've been told data is ready.
+
+    while (true) {
+      // Have _some_ data available. Let's figure out what it is.
+      gpio_put(chip_select_pin, 0);
+      spi_write_read_blocking(SPI_PORT, &static_read_cmd_byte, &status, 1);
+      // printStatusByte(status);
+      // printf("\n");
+
+      if (!((status & 0b100) >> 2)) {
+        break;
+      }
+
+      gpio_put(chip_select_pin, 1);
+    }
+
     spi_read_blocking(SPI_PORT, 0, reinterpret_cast<uint8_t*>(&adc_data), 4);
-    gpio_put(PIN_CS, 1);
+    gpio_put(chip_select_pin, 1);
+
+    // // Continually try to read a byte, and wait for the tatus byte to tell us
+    // // that there's data ready.
+    // while (  !((status & 0b100) >> 2)  ) {
+    //   spi_write_read_blocking(SPI_PORT, &static_read_cmd_byte, &status, 1);
+    // }
+    // // spi_read_blocking(SPI_PORT, 0, reinterpret_cast<uint8_t*>(&adc_data),
+    // 4);
 #endif
+
+    reads += 1;
 
     // Use the status byte that was now populated to figure out what's up.
     printStatusByte(status);
@@ -259,39 +296,40 @@ void readAdc() {
     adc_data = swap_msb_and_host<4>(adc_data);
     uint32_t adc_data_ch_id = (adc_data >> 28) & 0xF;
     printf(" ch_id: 0x%X", adc_data_ch_id);
-  
+
     printf(" raw bits: ");
     printBits(sizeof(adc_data), &adc_data);
     // printf(" raw bits hex: 0x%X", adc_data);
 
     int32_t raw_value = adc_data & 0xFFFFFF;
     raw_value = (raw_value << 8) >> 8;
-    // // int32_t raw_value = static_cast<int32_t>(sign_extend<24>(adc_data & 0xFFFFFF)); // sign extension, hopefully
-    // // int32_t raw_value = sign_extend<24>(adc_data & 0xFFFFFF); // sign extension, hopefully
-    // printf(" twos bits: ");
-    // printBits(sizeof(raw_value), &raw_value);
+    // // int32_t raw_value = static_cast<int32_t>(sign_extend<24>(adc_data &
+    // 0xFFFFFF)); // sign extension, hopefully
+    // // int32_t raw_value = sign_extend<24>(adc_data & 0xFFFFFF); // sign
+    // extension, hopefully printf(" twos bits: "); printBits(sizeof(raw_value),
+    // &raw_value);
     // // printf(" twos bits hex: 0x%X", raw_value);
-    // 
+    //
     printf(" converted: ");
-    adc_data &= 0x0F'FF'FF'FF; // Remove the channel ID now
-    if (adc_data == 0x00'FF'FF'FF) { // Overrange
+    adc_data &= 0x0F'FF'FF'FF;        // Remove the channel ID now
+    if (adc_data == 0x00'FF'FF'FF) {  // Overrange
       printf("OVERRANGE");
-    } else if (adc_data == 0x0F'00'00'00) { // Underrange
+    } else if (adc_data == 0x0F'00'00'00) {  // Underrange
       printf("UNDERRANGE");
     } else {
-    
       // convert the lower 28 bits, which are a twos-complement signed integer
       // representing the number of counts. The actual data is only 24 bits,
       // plus a sign extension bit afterwards.
-      
+
       // uint32_t raw_value = adc_data & 0xFFFFFF;
       float value = (3.3f / (1 << 23)) * raw_value;
       // adc_data &= 0xFF'FF'FF; // Remove the sign bit now, assumed to be 0.
       // float value = 3.3f * adc_data / ((1 << 23) - 1);
       printf("%0.5fV", value);
     }
-    
+
     printf("\r");
+    // printf("\n");
   }
 }
 
@@ -300,19 +338,53 @@ int main() {
 
   configureStdio();
 
-  configureSpi();
+  gpio_init(PIN_ADC0_ENABLE);
+  gpio_init(PIN_ADC1_ENABLE);
+  gpio_init(PIN_ADC2_ENABLE);
+  gpio_init(PIN_ADC3_ENABLE);
+
+  gpio_set_dir(PIN_ADC0_ENABLE, GPIO_OUT);
+  gpio_set_dir(PIN_ADC1_ENABLE, GPIO_OUT);
+  gpio_set_dir(PIN_ADC2_ENABLE, GPIO_OUT);
+  gpio_set_dir(PIN_ADC3_ENABLE, GPIO_OUT);
+
+  gpio_put(PIN_ADC0_ENABLE, 1);
+  gpio_put(PIN_ADC1_ENABLE, 1);
+  gpio_put(PIN_ADC2_ENABLE, 1);
+  gpio_put(PIN_ADC3_ENABLE, 1);
+
+  gpio_set_dir(PIN_ADC0_PGOOD, GPIO_IN);
+  gpio_set_dir(PIN_ADC1_PGOOD, GPIO_IN);
+  gpio_set_dir(PIN_ADC2_PGOOD, GPIO_IN);
+  gpio_set_dir(PIN_ADC3_PGOOD, GPIO_IN);
+
+  // Check that we have pgood
+  // while (!gpio_get(PIN_ADC0_PGOOD)) {}
+  // printf("Have pgood on ADC0");
+  //
+  // while (!gpio_get(PIN_ADC1_PGOOD)) {}
+  // printf("Have pgood on ADC1");
+
+  while (!gpio_get(PIN_ADC2_PGOOD)) {
+  }
+  printf("Have pgood on ADC2\n");
+
+  // while (!gpio_get(PIN_ADC3_PGOOD)) {}
+  // printf("Have pgood on ADC3");
+
+  configureSpi(PIN_ADC2_CS);
   // validateDefaultRegisterMap();
 
-  auto adc_config = configureAdc();
+  auto adc_config = configureAdc(PIN_ADC2_CS);
 
   // Make sure to start the external clock only after we've told the ADC to
   // expect the external clock.
   configurePwm(5e6);
 
   // Start reading data!
-  startAdc(adc_config);
+  startAdc(PIN_ADC2_CS, adc_config);
 
-  readAdc();
+  readAdc(PIN_ADC2_CS);
 
   return 0;
 }
